@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Slime Dash — Neon Cave Racer</title>
+<meta name="description" content="Steer a bouncy slime through an endless glowing cave. One button. How far can you go?">
+<meta name="theme-color" content="#0b0f1e">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" type="image/png" href="assets/icon-512.png">
+<link rel="apple-touch-icon" href="assets/icon-512.png">
+<meta property="og:title" content="Slime Dash — Neon Cave Racer">
+<meta property="og:description" content="Steer a bouncy slime through an endless glowing cave. One button. How far can you go?">
+<meta property="og:image" content="assets/banner-1200.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="style.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="hud-top">
+      <div id="hud-score"><span id="score-val">0</span><span class="unit" data-i18n="meters">m</span></div>
+      <div id="hud-right">
+        <div id="hud-coins">🟢 <span id="coins-val">0</span></div>
+        <button id="btn-mute" aria-label="Mute">🔊</button>
+        <button id="btn-pause" aria-label="Pause">⏸</button>
+      </div>
+    </div>
+    <div id="hud-combo" class="hidden">×<span id="combo-val">2</span></div>
+    <div id="ghost-label" class="hidden" data-i18n="ghost">★ best</div>
+  </div>
+
+  <!-- Menu -->
+  <div id="menu" class="screen">
+    <div class="title-wrap">
+      <canvas id="menu-slime" width="200" height="200"></canvas>
+      <h1 class="game-title"><span class="t1">SLIME</span><span class="t2">DASH</span></h1>
+      <p class="tagline" data-i18n="tagline">Steer the slime. Survive the cave.</p>
+    </div>
+    <div class="menu-buttons">
+      <button id="btn-play" class="btn btn-primary big" data-i18n="play">▶ PLAY</button>
+      <div class="row">
+        <button id="btn-shop" class="btn" data-i18n="shop">🛒 Shop</button>
+        <button id="btn-lang" class="btn">EN / فا</button>
+      </div>
+    </div>
+    <div class="menu-stats">
+      <div><span data-i18n="best">Best</span>: <b id="menu-best">0</b><span data-i18n="meters">m</span></div>
+      <div><span data-i18n="coins">Coins</span>: <b id="menu-coins">0</b> 🟢</div>
+      <div><span data-i18n="streak">Streak</span>: <b id="menu-streak">0</b> 🔥</div>
+    </div>
+  </div>
+
+  <!-- Death screen -->
+  <div id="death" class="screen hidden">
+    <div class="panel">
+      <h2 data-i18n="splat">SPLAT!</h2>
+      <div class="big-score"><span id="death-score">0</span><span data-i18n="meters">m</span></div>
+      <div id="death-delta" class="delta"></div>
+      <div id="death-coins" class="coins-row">🟢 <span id="death-coins-val">0</span> <button id="btn-double" class="btn btn-ad" data-i18n="double">×2 ▶ watch ad</button></div>
+      <div class="row">
+        <button id="btn-revive" class="btn btn-ad" data-i18n="revive"> revive ▶</button>
+        <button id="btn-retry" class="btn btn-primary" data-i18n="retry">↻ Retry</button>
+      </div>
+      <div class="row">
+        <button id="btn-share" class="btn" data-i18n="challenge">💬 Challenge a friend</button>
+        <button id="btn-death-shop" class="btn" data-i18n="shop">🛒 Shop</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shop -->
+  <div id="shop" class="screen hidden">
+    <div class="panel">
+      <h2 data-i18n="shop">Shop</h2>
+      <div class="coins-row">🟢 <span id="shop-coins">0</span></div>
+      <div id="shop-grid" class="grid"></div>
+      <button id="btn-shop-close" class="btn btn-primary" data-i18n="done">✓ Done</button>
+    </div>
+  </div>
+
+  <!-- Pause -->
+  <div id="pause" class="screen hidden">
+    <div class="panel">
+      <h2 data-i18n="paused">Paused</h2>
+      <div class="row">
+        <button id="btn-resume" class="btn btn-primary" data-i18n="resume">▶ Resume</button>
+        <button id="btn-quit" class="btn" data-i18n="quit">⤶ Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="hidden"></div>
+</div>
+
+<script src="js/i18n.js"></script>
+<script src="js/skins.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/ads.js"></script>
+<script src="js/tma.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/game.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
