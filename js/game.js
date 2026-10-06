@@ -48,7 +48,7 @@ function genCpsTo(x) {
     const cycle = (cpsGenX / 300 / METER) % 1;
     const calm = cpsGenX > 0 && cycle > 0.72;
     if (calm) hw = 290;
-    if (!calm && cpsGenX > 250 * METER && Math.random() < 0.22) { hw *= 0.5; pinch = 1; }
+    if (!calm && cpsGenX > 500 * METER && Math.random() < 0.16) { hw *= 0.62; pinch = 1; }
     let cy = prev.cy + rand(-300, 300);
     cy = Math.max(hw * 0.55, Math.min(LH - hw * 0.55, cy));
     cps.push({ x: cpsGenX, cy, hw, pinch, calm });
@@ -252,7 +252,7 @@ function hitsObstacle() {
     } else {
       let yy = o.y;
       if (o.move) yy += Math.sin(o.ph) * o.move.a;
-      const rr = o.r + SLIME_R * 0.8;
+      const rr = o.r * 0.92 + SLIME_R * 0.7;
       if ((o.x - px) * (o.x - px) + (yy - py) * (yy - py) < rr * rr) return true;
     }
   }
