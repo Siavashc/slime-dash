@@ -1,6 +1,6 @@
 // ---- Bootstrap: config, wiring, init ----
 // ===== EDIT THESE AFTER DEPLOY (see DEPLOY.md) =====
-window.SHARE_URL = window.SHARE_URL || "https://siavashc.github.io/slime-dash/";
+window.SHARE_URL = window.SHARE_URL || "https://t.me/slimedash_game_bot/slimedash";
 window.ADSGRAM_BLOCK_ID = window.ADSGRAM_BLOCK_ID || ""; // e.g. "int-12345" from partner.adsgram.com
 // ===================================================
 
