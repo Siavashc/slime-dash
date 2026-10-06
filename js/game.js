@@ -81,7 +81,7 @@ function startRun() {
   state = "PLAY"; camX = 0; px = 220; py = 500; vy = 0;
   speed = 330; runCoins = 0; combo = 0; comboT = 0; score = 0;
   clearRun(); cps.length = 0; cpsGenX = 0; genX = 0;
-  timeScale = 1; shake = 0; flashT = 0; graceT = 0.8; revivedUsed = false;
+  timeScale = 1; shake = 0; flashT = 0; graceT = 1.25; revivedUsed = false;
   holding = false;
   GameState.touchStreak();
   firstRun = false;
