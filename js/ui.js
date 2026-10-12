@@ -2,6 +2,8 @@
 window.UI = (() => {
   const el = (id) => document.getElementById(id);
   let comboFlash = 0, lastCombo = 0;
+  let shopTab = "skins";
+  let lbTab = "global";
 
   function show(id) { el(id).classList.remove("hidden"); }
   function hide(id) { el(id).classList.add("hidden"); }
@@ -14,21 +16,49 @@ window.UI = (() => {
     tEl._t = setTimeout(() => tEl.classList.add("hidden"), 1800);
   }
 
+  function hearts(n) {
+    const max = GameState.maxLives();
+    let s = "";
+    for (let i = 0; i < max; i++) s += i < n ? "❤️" : "🖤";
+    return s;
+  }
+
   function fmt() {
     el("menu-best").textContent = GameState.best;
     el("menu-coins").textContent = GameState.coins;
     el("menu-streak").textContent = GameState.streak;
+    el("menu-lives").textContent = hearts(GameState.lives);
+    el("menu-lives-inline").textContent = hearts(GameState.lives);
+    // daily bonus button state
+    const d = el("btn-daily");
+    if (d) {
+      d.classList.toggle("hidden", !GameState.canDaily());
+      d.textContent = t("dailyBtn");
+    }
+    // regen eta line
+    const eta = el("menu-lives-eta");
+    if (eta) {
+      const ms = GameState.nextLifeEta();
+      if (ms > 0 && GameState.lives < GameState.maxLives()) {
+        const m = Math.floor(ms / 60000), s2 = Math.floor((ms % 60000) / 1000);
+        eta.textContent = "+" + hearts(1) + " " + m + ":" + String(s2).padStart(2, "0");
+        eta.classList.remove("hidden");
+      } else eta.classList.add("hidden");
+    }
+    el("hud-lives").textContent = hearts(GameState.lives);
+    if (runShield !== undefined) el("hud-shield").classList.toggle("hidden", !runShield);
+    const rp = el("menu-reward");
+    if (rp && window._pendingReward) { rp.classList.remove("hidden"); }
   }
 
-  function showHUD() { show("hud"); hide("menu"); hide("death"); }
-
+  function showHUD() { show("hud"); hide("menu"); hide("death"); hide("lb"); hide("invite"); hide("nolives"); }
   function goMenu() {
     hideAll(); show("menu"); hide("hud");
     state = "MENU"; camX = 0; px = 220; py = 500; vy = 0;
     clearRun(); cps.length = 0; cpsGenX = 0; genWorld();
     SFX.stopMusic(); fmt();
   }
-  function hideAll() { ["menu", "death", "shop", "pause", "hud"].forEach(hide); }
+  function hideAll() { ["menu", "death", "shop", "pause", "hud", "lb", "invite", "nolives"].forEach(hide); }
 
   function onDeath(score, runCoins, best) {
     el("death-score").textContent = score;
@@ -38,11 +68,6 @@ window.UI = (() => {
     if (score > best && best > 0) { delta.textContent = t("newBest", { n: score - best }); delta.classList.add("pos"); }
     else if (best === 0) { delta.textContent = t("firstBest"); }
     else if (best > 0) { delta.textContent = t("beaten", { n: best - score }); }
-    // revive button once/run and only if real ad provider exists
-    const canRevive = !revivedUsed;
-    el("btn-revive").classList.toggle("hidden", !(canRevive && GameAds.available()));
-    // double coins ad availability
-    el("btn-double").classList.toggle("hidden", !(runCoins > 0 && GameAds.available()));
     setTimeout(() => { show("death"); }, 650);
   }
 
@@ -50,6 +75,8 @@ window.UI = (() => {
     if (state === "PLAY" || state === "DEAD") {
       el("score-val").textContent = score | 0;
       el("coins-val").textContent = runCoins;
+      el("hud-lives").textContent = hearts(GameState.lives);
+      el("hud-shield").classList.toggle("hidden", !runShield);
       // ghost label
       const gl = el("ghost-label");
       if (GameState.best > 0 && !ghostPassed) gl.classList.remove("hidden");
@@ -70,11 +97,31 @@ window.UI = (() => {
   }
   function resume() { state = "PLAY"; hide("pause"); }
 
-  // ---------- shop ----------
+  // ---------- out of lives ----------
+  function openNoLives() {
+    el("nolives-lives").textContent = hearts(GameState.lives);
+    // ad button only when a provider is wired
+    el("btn-lives-ad").classList.toggle("hidden", !GameAds.available());
+    // coins button only when affordable is possible (coins < price → still show, disabled)
+    const cost = 100;
+    const bc = el("btn-lives-coins");
+    bc.disabled = GameState.coins < cost;
+    bc.textContent = "➕1 " + t("lives") + " · 🟢" + cost;
+    show("nolives");
+  }
+
+  // ---------- shop (skins + gear tabs) ----------
   function renderShop() {
     el("shop-coins").textContent = GameState.coins;
+    el("tab-skins").classList.toggle("on", shopTab === "skins");
+    el("tab-gear").classList.toggle("on", shopTab === "gear");
+    el("shop-hint").textContent = shopTab === "gear" ? t("gearSlots") : "";
     const grid = el("shop-grid");
     grid.innerHTML = "";
+    if (shopTab === "skins") renderSkins(grid);
+    else renderGear(grid);
+  }
+  function renderSkins(grid) {
     for (const s of SKINS) {
       const card = document.createElement("div");
       card.className = "skin-card";
@@ -106,6 +153,125 @@ window.UI = (() => {
       };
       grid.appendChild(card);
     }
+  }
+  function renderGear(grid) {
+    for (const g of GEAR) {
+      const card = document.createElement("div");
+      card.className = "skin-card gear-card";
+      const owned = GameState.gearOwned.includes(g.id);
+      const on = GameState.hasGear(g.id);
+      if (owned) card.classList.add("owned");
+      else card.classList.add("locked");
+      if (on) card.classList.add("equipped");
+      const ic = document.createElement("div"); ic.className = "gear-icon"; ic.textContent = g.icon;
+      const nm = document.createElement("div"); nm.className = "name"; nm.textContent = g.name;
+      const desc = document.createElement("div"); desc.className = "gear-desc"; desc.textContent = t(g.desc);
+      const pr = document.createElement("div"); pr.className = "price";
+      pr.textContent = !owned ? "🟢 " + g.price : (on ? "✓ " + t("gearEquippedShort") : t("gearEquip"));
+      card.appendChild(ic); card.appendChild(nm); card.appendChild(desc); card.appendChild(pr);
+      card.onclick = () => {
+        SFX.unlock(); SFX.click();
+        if (!GameState.gearOwned.includes(g.id)) {
+          if (GameState.coins >= g.price) {
+            GameState.coins -= g.price;
+            GameState.gearOwned.push(g.id);
+            GameState.equipGear(g.id); // auto-equip on purchase
+            GameState.write(); SFX.buy();
+            toast(t("toastUnlocked"));
+          } else {
+            toast(t("toastNeedCoins"));
+            GameAds.rewarded(() => { GameState.coins += 50; GameState.write(); fmt(); renderShop(); });
+          }
+        } else {
+          const ok = GameState.equipGear(g.id);
+          if (!ok) toast(t("gearSlotsFull"));
+          else SFX.click();
+        }
+        renderShop(); fmt();
+      };
+      grid.appendChild(card);
+    }
+  }
+
+  // ---------- leaderboard ----------
+  function lbRow(idx, r, me) {
+    const div = document.createElement("div");
+    div.className = "lb-row" + (me ? " me" : "");
+    const medal = ["🥇", "🥈", "🥉"][idx] || ("#" + (idx + 1));
+    const name = document.createElement("div");
+    name.className = "lb-name";
+    name.textContent = medal + " " + ((r.name || "Player").slice(0, 18));
+    if (r.you) name.className += " you";
+    const sc = document.createElement("div");
+    sc.className = "lb-score";
+    sc.textContent = (r.best | 0) + " m";
+    div.appendChild(name); div.appendChild(sc);
+    return div;
+  }
+  async function renderLeaderboard() {
+    el("tab-global").classList.toggle("on", lbTab === "global");
+    el("tab-group").classList.toggle("on", lbTab === "group");
+    const list = el("lb-list");
+    list.innerHTML = "";
+    const loading = document.createElement("div");
+    loading.className = "lb-empty"; loading.textContent = "…";
+    list.appendChild(loading);
+    let data = null;
+    try {
+      data = lbTab === "global" ? await Api.leaderboard() : await Api.groupLeaderboard();
+    } catch (e) { data = null; }
+    list.innerHTML = "";
+    const groupEmpty = lbTab === "group" && (!data || !data.top || !data.top.length);
+    if (!Api.enabled() || !data || !data.top || (!data.top.length && lbTab === "global")) {
+      const d = document.createElement("div");
+      d.className = "lb-empty";
+      d.textContent = groupEmpty ? t("lbGroupEmpty") : t("lbEmpty");
+      list.appendChild(d);
+    } else if (!data.top.length && groupEmpty) {
+      const d = document.createElement("div");
+      d.className = "lb-empty";
+      d.textContent = t("lbGroupEmpty");
+      list.appendChild(d);
+    } else {
+      const uid = Api.meId();
+      data.top.forEach((r, i) => {
+        const me = lbTab === "global" ? (r.uid === uid || r.user_id === uid) : (r.uid === uid);
+        list.appendChild(lbRow(i, r, me));
+      });
+      if (data.rank && data.rank > data.top.length) {
+        const d = document.createElement("div");
+        d.className = "lb-empty lb-rank-line";
+        d.textContent = t("lbRank") + ": #" + data.rank + " · ♥ " + (GameState.best) + " m";
+        list.appendChild(d);
+      }
+    }
+  }
+  function openLeaderboard() {
+    show("lb");
+    renderLeaderboard();
+  }
+
+  // ---------- invite ----------
+  function openInvite() {
+    el("invite-link").textContent = Api.refLink();
+    Api.pendingFor().then((p) => {
+      if (p && (p.v | 0) > (GameState.pendingApplied | 0) && (p.lives || p.coins)) {
+        el("invite-refs").textContent = t("rewardPending");
+      }
+    });
+    show("invite");
+  }
+  async function copyInvite() {
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if (tg && tg.openTelegramLink) {
+      tg.openTelegramLink("https://t.me/share/url?url=" +
+        encodeURIComponent(Api.refLink()) + "&text=" + encodeURIComponent(t("inviteNudge")));
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(t("inviteNudge") + " " + Api.refLink());
+      toast(t("toastCopied"));
+    } catch (e) {}
   }
 
   function drawSkinPreview(c2d, s) {
@@ -161,6 +327,9 @@ window.UI = (() => {
 
   return {
     showHUD, goMenu, onDeath, tick, pause, resume, toast, fmt, renderShop, menuTick,
-    show, hide, el,
+    show, hide, el, openNoLives, openLeaderboard, renderLeaderboard, openInvite, copyInvite,
+    setShopTab, setLbTab,
   };
+  function setShopTab(tab) { shopTab = tab; renderShop(); }
+  function setLbTab(tab) { lbTab = tab; renderLeaderboard(); }
 })();

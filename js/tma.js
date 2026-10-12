@@ -17,10 +17,10 @@ window.TMA = (() => {
 
   // share score: in TMA → forward to a chat; on web → clipboard
   async function shareScore(score) {
-    const url = botDeepLink();
+    const url = Api.refLink() || botDeepLink();
     const text = LANG === "fa"
-      ? "امتیازم توی «Slime Dash»: " + score + "متر — کی بیشتر می‌ره؟"
-      : "I steered for " + score + "m in Slime Dash — beat that!";
+      ? "امتیازم توی «Slime Dash»: " + score + " متر — کی بیشتر می‌ره؟ 🐸"
+      : "I steered for " + score + "m in Slime Dash — beat that! 🐸";
     if (ready && tg.openTelegramLink) {
       tg.openTelegramLink(
         "https://t.me/share/url?url=" + encodeURIComponent(url) +
@@ -33,7 +33,7 @@ window.TMA = (() => {
     } catch (e) { return false; }
   }
   function botDeepLink() {
-    return window.SHARE_URL || "https://t.me/SlimeDashBot/slimedash";
+    return window.SHARE_URL || "https://t.me/slimedash_game_bot/slimedash";
   }
-  return { init, ready, shareScore };
+  return { init, ready, shareScore, botDeepLink };
 })();

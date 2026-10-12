@@ -1,4 +1,4 @@
-// ---- Skins / shop + persisted save state ----
+// ---- Skins / gear shop + persisted save state ----
 window.SKINS = [
   { id: "classic", name: "Mint",    body: "#34e8a4", glow: "#1fbf8a", eyes: "#062b20", price: 0 },
   { id: "lagoon",  name: "Lagoon",  body: "#38bdf8", glow: "#0ea5e9", eyes: "#052a3d", price: 50 },
@@ -33,6 +33,16 @@ window.GameState = {
   equipped: "classic",
   muted: false,
   deaths: 0,
+  // v2: lives + gear
+  lives: 3,
+  gearOwned: [],
+  gearEquipped: [],
+  dailyDay: "",
+  shareLifeAt: 0,     // epoch ms of last share-for-life reward
+  myUid: 0,           // telegram user id (from initData) / 0 on web
+  refsClaimed: 0,     // referral rewards already granted to me locally
+  purchasesSeen: [],  // fulfilled Stars purchase payloads already granted
+  pendingApplied: 0,  // version of bot-published pending rewards already applied
   load() {
     const s = Save.read();
     this.coins = s.coins | 0;
@@ -44,22 +54,38 @@ window.GameState = {
     this.equipped = this.owned.includes(s.equipped) ? s.equipped : "classic";
     this.muted = !!s.muted;
     this.deaths = s.deaths | 0;
+    this.lives = "lives" in s ? (s.lives | 0) : 3;
+    this.gearOwned = Array.isArray(s.gearOwned) ? s.gearOwned : [];
+    this.gearEquipped = Array.isArray(s.gearEquipped) ? s.gearEquipped : [];
+    this.dailyDay = s.dailyDay || "";
+    this.shareLifeAt = s.shareLifeAt || 0;
+    this.myUid = s.myUid | 0;
+    this.refsClaimed = s.refsClaimed | 0;
+    this.purchasesSeen = Array.isArray(s.purchasesSeen) ? s.purchasesSeen : [];
+    this.pendingApplied = s.pendingApplied | 0;
+    // cap: never more than maxLives or fewer than 0
+    this.lives = Math.max(0, Math.min(this.maxLives(), this.lives));
     // daily best rollover
     const today = new Date().toISOString().slice(0, 10);
     if (s.day !== today) {
-      this.yesterdayBest = s.day ? (s.best | 0) : (s.yesterdayBest | 0); // yesterday's final best
+      this.yesterdayBest = s.day ? (s.best | 0) : (s.yesterdayBest | 0);
       this._day = today;
     } else {
       this.yesterdayBest = s.yesterdayBest | 0;
       this._day = today;
     }
-    // streak: played yesterday → +1 kept; skipped → reset (only updated on first play of day)
+    // prune unequipped gear that isn't owned
+    this.gearEquipped = this.gearEquipped.filter((g) => this.gearOwned.includes(g) && (window.GEAR || []).some((d) => d.id === g));
   },
   write() {
     Save.patch({
       coins: this.coins, best: this.best, yesterdayBest: this.yesterdayBest,
       streak: this.streak, lastPlayDay: this.lastPlayDay, owned: this.owned,
       equipped: this.equipped, muted: this.muted, day: this._day, deaths: this.deaths,
+      lives: this.lives, gearOwned: this.gearOwned, gearEquipped: this.gearEquipped,
+      dailyDay: this.dailyDay, shareLifeAt: this.shareLifeAt, myUid: this.myUid,
+      refsClaimed: this.refsClaimed, purchasesSeen: this.purchasesSeen,
+      pendingApplied: this.pendingApplied,
     });
   },
   touchStreak() {
@@ -72,4 +98,46 @@ window.GameState = {
     this.write();
   },
   skin() { return SKINS.find((s) => s.id === this.equipped) || SKINS[0]; },
+  maxLives() { return this.hasGear("heart") ? 4 : 3; },
+  hasGear(id) { return this.gearEquipped.indexOf(id) !== -1; },
+  canEquipMore() { return this.gearEquipped.length < 2; },
+  equipGear(id) {
+    if (this.gearEquipped.includes(id)) this.gearEquipped = this.gearEquipped.filter((g) => g !== id);
+    else if (this.canEquipMore()) { this.gearEquipped.push(id); }
+    else return false;
+    this.write();
+    return true;
+  },
+  addLives(n) {
+    this.lives = Math.min(this.maxLives(), this.lives + n);
+    this.write();
+  },
+  // daily bonus: once per calendar day
+  canDaily() { return this.dailyDay !== new Date().toISOString().slice(0, 10); },
+  claimDaily() { this.dailyDay = new Date().toISOString().slice(0, 10); this.write(); },
+  // share-for-life throttle: one life per 3 minutes
+  canShareLife() { return Date.now() - (this.shareLifeAt || 0) > 3 * 60 * 1000; },
+  grantShareLife() { this.shareLifeAt = Date.now(); this.addLives(1); },
+  // gentle regen: 1 life per 10 minutes up to max (never blocks the game fully)
+  LIFE_RATE_MS: 10 * 60 * 1000,
+  lifeTs: 0,
+  tickLives() {
+    const s = Save.read();
+    if (!s.lifeTs) { Save.patch({ lifeTs: Date.now() }); return false; }
+    let changed = false;
+    let ts = s.lifeTs;
+    while (this.lives < this.maxLives() && Date.now() - ts >= this.LIFE_RATE_MS) {
+      ts += this.LIFE_RATE_MS;
+      this.lives += 1;
+      changed = true;
+    }
+    if (changed) { this.write(); Save.patch({ lifeTs: ts }); }
+    return changed;
+  },
+  nextLifeEta() {
+    if (this.lives >= this.maxLives()) return 0;
+    const s = Save.read();
+    const left = (s.lifeTs || Date.now()) + this.LIFE_RATE_MS - Date.now();
+    return Math.max(0, left);
+  },
 };

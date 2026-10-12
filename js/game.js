@@ -44,9 +44,10 @@ function genCpsTo(x) {
     const ramp01 = Math.min(1, d / 900);           // width ramp over first 900 m
     let hw = 205 - 55 * ramp01;
     let pinch = 0;
-    // plateau (calm zone) every ~300 m of progress
+    // plateau (calm zone) every ~300 m of progress; Lucky Clovers doubles it
     const cycle = (cpsGenX / 300 / METER) % 1;
-    const calm = cpsGenX > 0 && cycle > 0.72;
+    const calmTh = GameState.hasGear("lucky") ? 0.44 : 0.72;
+    const calm = cpsGenX > 0 && cycle > calmTh;
     if (calm) hw = 290;
     if (!calm && cpsGenX > 500 * METER && Math.random() < 0.16) { hw *= 0.62; pinch = 1; }
     let cy = prev.cy + rand(-300, 300);
@@ -73,7 +74,10 @@ let obstacles = [], coinsArr = [], parts = [], pops = [], trail = [], bubbles = 
 let genX = 0, timeScale = 1, shake = 0, flashT = 0, graceT = 0;
 let revivedUsed = false, deaths = 0, ghostPassed = false, closeT = 0;
 let firstRun = true, deathTimer = 0, lastDeath = "";
+let runShield = false, phaseT = 0;
 const SLIME_R = 26;
+
+function comboDur() { return (GameState.hasGear("combo") ? 3.4 : 2.2); }
 
 function clearRun() { obstacles = []; coinsArr = []; parts = []; pops = []; trail = []; ghostPassed = false; }
 
@@ -82,6 +86,8 @@ function startRun() {
   speed = 330; runCoins = 0; combo = 0; comboT = 0; score = 0;
   clearRun(); cps.length = 0; cpsGenX = 0; genX = 0;
   timeScale = 1; shake = 0; flashT = 0; graceT = 1.25; revivedUsed = false;
+  runShield = GameState.hasGear("shield");
+  phaseT = 0;
   holding = false;
   GameState.touchStreak();
   firstRun = false;
@@ -109,11 +115,12 @@ function spawnChunk() {
   const T = tunnelAt(genX);
   const d = genX / METER;
   if (T.calm) {
-    // coin shower
-    for (let i = 0; i < 8; i++) {
-      const x = genX + i * 56;
+    // coin shower (Lucky Clovers: bigger shower)
+    const n = GameState.hasGear("lucky") ? 12 : 8;
+    for (let i = 0; i < n; i++) {
+      const x = genX + i * (480 / (n - 1));
       const T2 = tunnelAt(x);
-      const t = i / 7;
+      const t = i / (n - 1);
       const cy2 = T2.cy + Math.sin(t * Math.PI * 2) * (T2.hw - 70) * 0.6;
       coinsArr.push({ x, y: cy2, got: false, ph: i });
     }
@@ -146,9 +153,10 @@ function spawnChunk() {
 // ---------- update ----------
 function update(dt) {
   const effDt = dt * timeScale;
+  const invul = graceT > 0 || phaseT > 0;
   if (state === "PLAY") {
     const T0 = tunnelAt(px);
-    if (graceT <= 0) {
+    if (!invul) {
       if (py < T0.cy - T0.hw + SLIME_R && vy > 0) lastDeath = "wall-bottom";
       else if (py > T0.cy + T0.hw - SLIME_R && vy < 0) lastDeath = "wall-top";
       else if (Math.abs(py - T0.cy) > T0.hw - SLIME_R) lastDeath = "wall";
@@ -157,7 +165,9 @@ function update(dt) {
   if (state === "PLAY") {
     if (!holding) speed += 26 * effDt; // gentle creep
     const d = px / METER;
-    const targetSpeed = Math.min(790, 330 + d * 1.05);
+    // Soft Start gear: 30% slower early ramp
+    const ramp = GameState.hasGear("brake") ? (Math.min(d, 300) * 0.735 + Math.max(0, d - 300) * 1.05) : d * 1.05;
+    const targetSpeed = Math.min(790, 330 + ramp);
     speed += (targetSpeed - speed) * 0.4 * effDt;
     px += speed * effDt;
     // wave steering: fixed-slope, instant-intent with light goo momentum smoothing
@@ -167,29 +177,39 @@ function update(dt) {
     camX = px - W * 0.32 / S;
     if (py < SLIME_R) { py = SLIME_R; vy = Math.max(vy, 120); }
     if (py > LH - SLIME_R) { py = LH - SLIME_R; vy = Math.min(vy, -120); }
-    // grace shrink
+    // grace shrink / ghost-goo timer
     if (graceT > 0) graceT -= dt;
+    if (phaseT > 0) phaseT -= dt;
 
     while (genX < camX + 2600) { spawnChunk(); }
     // collisions
     const T = tunnelAt(px);
     const edge = T.hw - SLIME_R;
-    if (graceT <= 0 && (Math.abs(py - T.cy) > edge || hitsObstacle())) return die();
+    if (!invul && (Math.abs(py - T.cy) > edge || hitsObstacle())) return die();
     // near-miss slow-mo
-    if (graceT <= 0 && Math.abs(py - T.cy) > edge - 16 && Math.abs(py - T.cy) <= edge && closeT <= 0) {
+    if (!invul && Math.abs(py - T.cy) > edge - 16 && Math.abs(py - T.cy) <= edge && closeT <= 0) {
       closeT = 1.2; timeScale = 0.55; flashT = 0.5;
       SFX.close();
       pops.push({ x: px, y: py, text: t("close"), color: "#ff5d8f", t: 1 });
       for (let i = 0; i < 10; i++) parts.push(makePart(px, py, 1, "#ff5d8f"));
     }
     if (closeT > 0) closeT -= dt;
-    // coins
+    // coins (magnet gear pulls them in)
     for (const c of coinsArr) {
       if (c.got) continue;
-      const dx = c.x - px, dy = c.y - py;
+      let dx = c.x - px, dy = c.y - py;
+      if (GameState.hasGear("magnet")) {
+        const md = dx * dx + dy * dy;
+        if (md < 180 * 180 && md > 36) {
+          const pull = 300 * effDt;
+          const dist = Math.sqrt(md);
+          c.x -= (dx / dist) * pull; c.y -= (dy / dist) * pull;
+          dx = c.x - px; dy = c.y - py;
+        }
+      }
       if (dx * dx + dy * dy < (SLIME_R + 13) * (SLIME_R + 13)) {
         c.got = true;
-        comboT = 2.2; combo++;
+        comboT = comboDur(); combo++;
         const mult = comboMult();
         runCoins += mult;
         SFX.coin(Math.min(8, combo));
@@ -265,40 +285,75 @@ function makePart(x, y, n, color) {
   return { x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60, r: rand(3, 9), t: rand(0.5, 1.1), c: color };
 }
 
-// ---------- death / revive / finish ----------
+// ---------- death / lives / shield / finish ----------
 function die() {
   const T = tunnelAt(px);
   const edge = T.hw - SLIME_R;
   const hit = hitsObstacle();
-  if (hit) {
-    for (const o of obstacles) {
-      if (o.gone) continue;
-      const dx = Math.abs(o.x - px);
-      if (o.type === "spike" && dx < 34 && ((o.side === -1 && py < T.cy) || (o.side !== -1 && py > T.cy))) { lastDeath = "spike-" + (o.side === -1 ? "top" : "bottom"); break; }
-      if (o.type === "saw" && dx < 90) { lastDeath = "saw"; break; }
-    }
-  } else lastDeath = py > T.cy + T.hw - SLIME_R ? "wall-top" : "wall-bottom";
-  if (!lastDeath) lastDeath = "wall";
+  if (!lastDeath || lastDeath === "wall") {
+    if (hit) {
+      for (const o of obstacles) {
+        if (o.gone) continue;
+        const dx = Math.abs(o.x - px);
+        if (o.type === "spike" && dx < 34 && ((o.side === -1 && py < T.cy) || (o.side !== -1 && py > T.cy))) { lastDeath = "spike-" + (o.side === -1 ? "top" : "bottom"); break; }
+        if (o.type === "saw" && dx < 90) { lastDeath = "saw"; break; }
+      }
+    } else lastDeath = py > T.cy + T.hw - SLIME_R ? "wall-top" : "wall-bottom";
+    if (!lastDeath) lastDeath = "wall";
+  }
+  // 1) Bubble Shield absorbs the crash (once per run)
+  if (runShield) {
+    runShield = false;
+    clearNear();
+    graceT = Math.max(graceT, 1.0); flashT = 0.35;
+    pops.push({ x: px, y: py - 70, text: t("shieldSaved"), color: "#7dd3fc", t: 1.4 });
+    for (let i = 0; i < 16; i++) parts.push(makePart(px, py, 1, "#7dd3fc"));
+    SFX.revive();
+    return; // keep playing — a crash with zero cost
+  }
+  // 2) spend a life and respawn (Ghost Goo grants invulnerability window)
+  GameState.lives = Math.max(0, GameState.lives - 1);
+  GameState.write();
+  lastDeath = "";
+  if (GameState.lives > 0) {
+    clearNear();
+    graceT = 1.6;
+    if (GameState.hasGear("phase")) { phaseT = 6; pops.push({ x: px, y: py - 90, text: "👻", color: "#c084fc", t: 1.2 }); }
+    parts.length = 0;
+    py = tunnelAt(px).cy; vy = 0;
+    SFX.revive();
+    pops.push({ x: px, y: py - 60, text: t("lifeTaken", { n: GameState.lives }), color: "#ff5d8f", t: 1.1 });
+    return; // run continues
+  }
+  // 3) out of lives — run over
   state = "DEAD"; deathTimer = 0.55;
   SFX.stopMusic(); SFX.splat();
   shake = 1.4; flashT = 0.4;
   for (let i = 0; i < 34; i++) parts.push(makePart(px, py, 1, GameState.skin().body));
   for (let i = 0; i < 12; i++) parts.push(makePart(px, py, 1, "#2e1240"));
   GameState.deaths++;
-  UI.onDeath(score, runCoins, GameState.best);
+  window.GameAds && GameAds.maybeInterstitial();
+  if (window.submitRun) window.submitRun(score, finalCoins(runCoins));
+  UI.onDeath(score, finalCoins(runCoins), GameState.best);
   // bank coins immediately (never lose them); x2-ad button can top up later
-  GameState.coins += runCoins;
+  GameState.coins += finalCoins(runCoins);
   GameState.runCoinsBank = runCoins;
   GameState.write();
 }
 
-function revive() {
-  revivedUsed = true;
-  graceT = 1.6;
+function finalCoins(c) { return GameState.hasGear("doubler") ? Math.ceil(c * 1.5) : c; }
+
+function clearNear() {
   for (const o of obstacles) if (Math.abs(o.x - px) < 800) o.gone = true;
   parts.length = 0;
   py = tunnelAt(px).cy;
   vy = 0;
+}
+
+function revive() { // ad revive: refill to continue WITHOUT losing more lives
+  revivedUsed = true;
+  graceT = 1.6;
+  clearNear();
   state = "PLAY";
   UI.showHUD(); SFX.revive(); SFX.startMusic();
   pops.push({ x: px, y: py - 70, text: t("revived"), color: "#ffd166", t: 1.3 });
@@ -559,7 +614,28 @@ function drawSlime(x, y, previewScale = 1) {
   // mouth
   ctx.strokeStyle = sk.eyes; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(0, r * 0.34 + look * 0.5, r * 0.22, 0.15, Math.PI - 0.15); ctx.stroke();
-  if (graceT > 0 && state === "PLAY") {
+  if (phaseT > 0 && state === "PLAY") {
+    // ghost-goo aura: pulsing violet ring + transparency
+    ctx.globalAlpha = 0.35 + 0.25 * Math.sin(perfNow() / 120);
+    ctx.strokeStyle = "rgba(192,132,252,0.9)"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(0, 0, r * 1.45, r * 1.55, 0, 0, 7); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  if (runShield && state === "PLAY") {
+    // bubble shield dome
+    const wob = Math.sin(perfNow() / 300) * 0.04;
+    ctx.globalAlpha = 0.55;
+    const sg = ctx.createRadialGradient(0, 0, r * 0.8, 0, 0, r * 1.7);
+    sg.addColorStop(0, "rgba(125,211,252,0.05)");
+    sg.addColorStop(1, "rgba(125,211,252,0.4)");
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.ellipse(0, 0, r * 1.6 * (1 + wob), r * 1.7 * (1 + wob), 0, 0, 7); ctx.fill();
+    ctx.globalAlpha = 0.8;
+    ctx.strokeStyle = "rgba(125,211,252,0.85)"; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.ellipse(0, 0, r * 1.6 * (1 + wob), r * 1.7 * (1 + wob), 0, 0, 7); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  if (graceT > 0 && state === "PLAY" && phaseT <= 0) {
     ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.ellipse(0, 0, r * 1.5, r * 1.6, 0, 0, 7); ctx.stroke();
   }

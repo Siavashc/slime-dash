@@ -1,15 +1,16 @@
 // ---- Bootstrap: config, wiring, init ----
 // ===== EDIT THESE AFTER DEPLOY (see DEPLOY.md) =====
 window.SHARE_URL = window.SHARE_URL || "https://t.me/slimedash_game_bot/slimedash";
-window.ADSGRAM_BLOCK_ID = window.ADSGRAM_BLOCK_ID || ""; // e.g. "int-12345" from partner.adsgram.com
-// ===================================================
+window.ADSGRAM_BLOCK_ID = window.ADSGRAM_BLOCK_ID || ""; // REWARD block: numeric, e.g. "123456" (partner.adsgram.ai)
+window.ADSGRAM_INT_ID = window.ADSGRAM_INT_ID || "";     // interstitial: e.g. "int-123"
+// Leaderboard: no server needed — the bot publishes data/*.json into this repo
+// and scores sync through Telegram-verified sendData(). See js/api.js header.
 
 setLang(LANG);
 GameState.load();
+GameState.tickLives();
 TMA.init();
 GameAds.init();
-UI.fmt();
-UI.goMenu();
 
 function commitBest() {
   const isNewBest = score > GameState.best;
@@ -17,18 +18,102 @@ function commitBest() {
   return isNewBest;
 }
 
-$("btn-play").onclick = () => { SFX.unlock(); SFX.click(); startRun(); };
-$("btn-shop").onclick = () => { SFX.click(); UI.renderShop(); UI.show("shop"); };
-$("btn-death-shop").onclick = () => { SFX.click(); UI.renderShop(); UI.show("shop"); };
+UI.fmt();
+UI.goMenu();
+
+// ----- rewards sync: the bot publishes data/pending/<uid>.json -----
+// Client applies rewards to local state + remembers the version; the next
+// sendData acks (the bot clears it server-side → file disappears).
+function syncRewards() {
+  Api.pendingFor().then((p) => {
+    if (!p || !(p.v | 0)) return;
+    if ((p.v | 0) <= (GameState.pendingApplied | 0)) return;
+    GameState.pendingApplied = p.v | 0;
+    if (p.lives) GameState.addLives(p.lives | 0);
+    if (p.coins) GameState.coins += p.coins | 0;
+    GameState.write();
+    UI.toast("🎁 " + ((p.lives | 0) ? "+" + p.lives + " ❤️ " : "") + ((p.coins | 0) ? "+" + p.coins + " 🟢" : ""));
+    SFX.buy();
+    UI.fmt();
+  }).catch(() => {});
+}
+
+// score sync happens only from the leaderboard panel (sendData closes the app)
+window.submitRun = function (score, runCoins) {
+  window._lastRun = { score: score | 0, coins: runCoins | 0 };
+};
+
+// legacy alias
+function pollRewards() { try { syncRewards(); } catch (e) {} }
+
+// ----- lives gates -----
+function needLives() { return GameState.lives <= 0; }
+
+function tryPlay() {
+  SFX.unlock(); SFX.click();
+  if (needLives()) { UI.openNoLives(); return; }
+  UI.hide("nolives"); UI.showHUD();
+  startRun();
+}
+
+$("btn-play").onclick = tryPlay;
+$("btn-shop").onclick = () => { SFX.click(); UI.setShopTab("skins"); UI.show("shop"); };
+$("btn-death-shop").onclick = () => { SFX.click(); UI.setShopTab("skins"); UI.show("shop"); };
 $("btn-shop-close").onclick = () => { SFX.click(); UI.hide("shop"); UI.fmt(); };
 
-$("btn-retry").onclick = () => { SFX.click(); commitBest(); UI.hide("death"); startRun(); };
+$("btn-lb").onclick = () => { SFX.click(); UI.openLeaderboard(); };
+$("btn-lb-close").onclick = () => { SFX.click(); UI.hide("lb"); UI.fmt(); };
+$("tab-global").onclick = () => { SFX.click(); UI.setLbTab("global"); };
+$("tab-group").onclick = () => { SFX.click(); UI.setLbTab("group"); };
+// sync score through the bot (Telegram-verified write)
+$("btn-lb-sync").onclick = () => {
+  SFX.click();
+  const r = window._lastRun || { score: GameState.best, coins: 0 };
+  if (Api.sendRunToBot(r.score, r.coins)) {
+    window._unsynced = false;
+    UI.toast("📤");
+  } else {
+    UI.toast(t("toastNoTma"));
+  }
+};
+
+$("btn-invite").onclick = () => { SFX.click(); UI.openInvite(); };
+$("btn-invite-share").onclick = () => { SFX.unlock(); SFX.click(); UI.copyInvite(); };
+$("btn-invite-copy").onclick = () => { SFX.unlock(); SFX.click(); UI.copyInvite(); };
+$("btn-invite-close").onclick = () => { SFX.click(); UI.hide("invite"); UI.fmt(); };
+
+// daily bonus: once per day, ad if available; free grant when no ad provider
+$("btn-daily").onclick = () => {
+  SFX.unlock(); SFX.click();
+  if (!GameState.canDaily()) return;
+  const grant = () => {
+    if (!GameState.canDaily()) return;
+    GameState.claimDaily();
+    GameState.coins += 100;
+    GameState.addLives(1);
+    GameState.write(); SFX.buy();
+    UI.toast(t("dailyBonusClaimed"));
+    UI.fmt();
+  };
+  if (GameAds.available()) GameAds.rewarded(grant);
+  else grant();
+};
+
+// ----- death screen -----
+$("btn-retry").onclick = () => {
+  SFX.click();
+  const isNewBest = commitBest();
+  UI.hide("death");
+  if (needLives()) UI.openNoLives();
+  else { UI.showHUD(); startRun(); }
+};
 
 $("btn-revive").onclick = () => {
   SFX.click();
+  if (revivedUsed) return;
   GameAds.rewarded(revive);
   if (!GameAds.available()) {
-    // no provider wired (dev/local): one pity revive per session so the mechanic is testable
+    // no provider wired (dev/local web): one pity revive per session so the mechanic is testable
     if (!window._pityRevive) { window._pityRevive = true; revive(); }
   }
 };
@@ -45,10 +130,34 @@ $("btn-double").onclick = () => {
 };
 
 $("btn-share").onclick = async () => {
-  commitBest();
+  SFX.unlock(); SFX.click();
   const r = await TMA.shareScore(score);
   if (r === "clipboard") UI.toast(t("toastCopied"));
+  // share = life: throttled, real rewards for spreading the game
+  if (GameState.canShareLife()) { GameState.grantShareLife(); UI.toast("❤️ +1!"); UI.fmt(); }
 };
+
+// ----- out-of-lives panel -----
+$("btn-lives-ad").onclick = () => { SFX.click(); GameAds.rewarded(() => { GameState.addLives(3); UI.toast("❤️❤️❤️ +3"); UI.fmt(); }); };
+$("btn-lives-share").onclick = async () => {
+  SFX.click();
+  await TMA.shareScore(GameState.best);
+  if (GameState.canShareLife()) { GameState.grantShareLife(); UI.toast("❤️ +1!"); UI.fmt(); setTimeout(() => UI.hide("nolives"), 900); }
+};
+$("btn-lives-coins").onclick = () => {
+  SFX.click();
+  if (GameState.coins >= 100) {
+    GameState.coins -= 100;
+    GameState.addLives(1);
+    GameState.write();
+    UI.toast("❤️ +1");
+    UI.hide("nolives");
+    UI.hide("death");
+    UI.fmt();
+    startRun();
+  }
+};
+$("btn-nolives-close").onclick = () => { SFX.click(); UI.hide("nolives"); UI.goMenu(); };
 
 $("btn-pause").onclick = () => { SFX.click(); UI.pause(); };
 $("btn-resume").onclick = () => { SFX.click(); UI.resume(); };
@@ -102,3 +211,10 @@ document.documentElement.dir = LANG === "fa" ? "rtl" : "ltr";
   try { UI.menuTick(1 / 60); } catch (e) {}
   requestAnimationFrame(menuLoop);
 })();
+
+// gentle live regen ticker on menu (hearts refill + eta)
+setInterval(() => {
+  if (state === "MENU") { if (GameState.tickLives()) SFX.revive(); syncRewards(); UI.fmt(); }
+}, 30000);
+
+pollRewards();

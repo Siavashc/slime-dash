@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Slime Dash — Neon Cave Racer</title>
-<meta name="description" content="Steer a bouncy slime through an endless glowing cave. One button. How far can you go?">
+<meta name="description" content="Steer a bouncy slime through an endless glowing cave. One button. 3 lives, 8 gears, global leaderboard. How far can you go?">
 <meta name="theme-color" content="#0b0f1e">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="icon" type="image/png" href="assets/icon-512.png">
@@ -27,6 +27,8 @@
       <div id="hud-score"><span id="score-val">0</span><span class="unit" data-i18n="meters">m</span></div>
       <div id="hud-right">
         <div id="hud-coins">🟢 <span id="coins-val">0</span></div>
+        <div id="hud-lives">❤️❤️❤️</div>
+        <div id="hud-shield" class="hidden">🛡</div>
         <button id="btn-mute" aria-label="Mute">🔊</button>
         <button id="btn-pause" aria-label="Pause">⏸</button>
       </div>
@@ -43,16 +45,22 @@
       <p class="tagline" data-i18n="tagline">Steer the slime. Survive the cave.</p>
     </div>
     <div class="menu-buttons">
-      <button id="btn-play" class="btn btn-primary big" data-i18n="play">▶ PLAY</button>
+      <button id="btn-play" class="btn btn-primary big"><span data-i18n="play">▶ PLAY</span> · <span id="menu-lives-inline">❤️❤️❤️</span></button>
+      <div id="menu-lives-eta" class="hidden"></div>
+      <button id="btn-daily" class="btn btn-ad daily" data-i18n="dailyBtn">🎁 Daily bonus ▶ Ad</button>
       <div class="row">
         <button id="btn-shop" class="btn" data-i18n="shop">🛒 Shop</button>
+        <button id="btn-lb" class="btn">🏆</button>
+        <button id="btn-invite" class="btn" data-i18n="inviteBtn">🎁 Invite = life + coins</button>
         <button id="btn-lang" class="btn">EN / فا</button>
       </div>
+      <div id="menu-reward" class="hidden">🎁 <span data-i18n="rewardPending">Rewards waiting</span></div>
     </div>
     <div class="menu-stats">
       <div><span data-i18n="best">Best</span>: <b id="menu-best">0</b><span data-i18n="meters">m</span></div>
       <div><span data-i18n="coins">Coins</span>: <b id="menu-coins">0</b> 🟢</div>
       <div><span data-i18n="streak">Streak</span>: <b id="menu-streak">0</b> 🔥</div>
+      <div><span data-i18n="lives">Lives</span>: <b id="menu-lives">❤️❤️❤️</b></div>
     </div>
   </div>
 
@@ -62,11 +70,12 @@
       <h2 data-i18n="splat">SPLAT!</h2>
       <div class="big-score"><span id="death-score">0</span><span data-i18n="meters">m</span></div>
       <div id="death-delta" class="delta"></div>
-      <div id="death-coins" class="coins-row">🟢 <span id="death-coins-val">0</span> <button id="btn-double" class="btn btn-ad" data-i18n="double">×2 ▶ watch ad</button></div>
+      <div id="death-coins" class="coins-row">🟢 <span id="death-coins-val">0</span> <button id="btn-double" class="btn btn-ad" data-i18n="double">×2 coins ▶ Ad</button></div>
       <div class="row">
         <button id="btn-revive" class="btn btn-ad" data-i18n="revive"> revive ▶</button>
         <button id="btn-retry" class="btn btn-primary" data-i18n="retry">↻ Retry</button>
       </div>
+      <div id="death-lives-mini" class="death-lives-mini">❤️❤️❤️</div>
       <div class="row">
         <button id="btn-share" class="btn" data-i18n="challenge">💬 Challenge a friend</button>
         <button id="btn-death-shop" class="btn" data-i18n="shop">🛒 Shop</button>
@@ -74,13 +83,64 @@
     </div>
   </div>
 
+  <!-- Out of lives -->
+  <div id="nolives" class="screen hidden">
+    <div class="panel">
+      <h2 data-i18n="outOfLives">OUT OF LIVES!</h2>
+      <p id="nolives-sub" class="muted" data-i18n="outOfLivesSub"></p>
+      <div class="big-hearts" id="nolives-lives">🖤🖤🖤</div>
+      <div class="stack">
+        <button id="btn-lives-ad" class="btn btn-ad big" data-i18n="addLivesAd">❤ +3 lives ▶ Ad</button>
+        <button id="btn-lives-share" class="btn" data-i18n="addLivesShare">💬 +1 life (share)</button>
+        <button id="btn-lives-coins" class="btn">➕1 life · 🟢100</button>
+      </div>
+      <p class="muted tiny">+1 ❤️ free every 10 min</p>
+      <button id="btn-nolives-close" class="btn" data-i18n="quit">⤶ Menu</button>
+    </div>
+  </div>
+
   <!-- Shop -->
   <div id="shop" class="screen hidden">
     <div class="panel">
       <h2 data-i18n="shop">Shop</h2>
-      <div class="coins-row">🟢 <span id="shop-coins">0</span></div>
+      <div class="row tabs">
+        <button id="tab-skins" class="btn tab on" data-i18n="tabSkins">🎨 Skins</button>
+        <button id="tab-gear" class="btn tab" data-i18n="tabGear">⚙️ Gear</button>
+      </div>
+      <div class="coins-row">🟢 <span id="shop-coins">0</span> <span id="shop-hint" class="muted tiny"></span></div>
       <div id="shop-grid" class="grid"></div>
       <button id="btn-shop-close" class="btn btn-primary" data-i18n="done">✓ Done</button>
+    </div>
+  </div>
+
+  <!-- Leaderboard -->
+  <div id="lb" class="screen hidden">
+    <div class="panel">
+      <h2 data-i18n="lbTitle">🏆 Leaderboard</h2>
+      <div class="row tabs">
+        <button id="tab-global" class="btn tab on" data-i18n="lbGlobal">🌍 Global</button>
+        <button id="tab-group" class="btn tab" data-i18n="lbGroup">👥 My Group</button>
+      </div>
+      <div id="lb-list" class="lb-list"></div>
+      <button id="btn-lb-sync" class="btn btn-ad" data-i18n="lbSync">📤 Send my score</button>
+      <p class="muted tiny" data-i18n="lbSyncHint"></p>
+      <button id="btn-lb-close" class="btn btn-primary" data-i18n="done">✓ Done</button>
+    </div>
+  </div>
+
+  <!-- Invite -->
+  <div id="invite" class="screen hidden">
+    <div class="panel">
+      <h2 data-i18n="inviteTitle">🤝 Invite friends, everyone wins</h2>
+      <p data-i18n="inviteText"></p>
+      <div class="reward-badge" data-i18n="inviteReward">+1 life · +100 coins</div>
+      <div class="invite-link" id="invite-link"></div>
+      <p class="muted" id="invite-refs"></p>
+      <div class="row">
+        <button id="btn-invite-share" class="btn btn-primary" data-i18n="shareChal">📣 Share & earn</button>
+        <button id="btn-invite-copy" class="btn" data-i18n="copyLink">📋 Copy link</button>
+      </div>
+      <button id="btn-invite-close" class="btn" data-i18n="done">✓ Done</button>
     </div>
   </div>
 
@@ -100,9 +160,11 @@
 
 <script src="js/i18n.js"></script>
 <script src="js/skins.js"></script>
+<script src="js/gear.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/ads.js"></script>
 <script src="js/tma.js"></script>
+<script src="js/api.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/game.js"></script>
 <script src="js/main.js"></script>
