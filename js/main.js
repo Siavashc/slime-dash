@@ -1,8 +1,8 @@
 // ---- Bootstrap: config, wiring, init ----
 // ===== EDIT THESE AFTER DEPLOY (see DEPLOY.md) =====
 window.SHARE_URL = window.SHARE_URL || "https://t.me/slimedash_game_bot/slimedash";
-window.ADSGRAM_BLOCK_ID = window.ADSGRAM_BLOCK_ID || ""; // REWARD block: numeric, e.g. "123456" (partner.adsgram.ai)
-window.ADSGRAM_INT_ID = window.ADSGRAM_INT_ID || "";     // interstitial: e.g. "int-123"
+window.ADSGRAM_BLOCK_ID = window.ADSGRAM_BLOCK_ID || "53656"; // REWARD (test platform 50833)
+window.ADSGRAM_INT_ID = window.ADSGRAM_INT_ID || "int-53658"; // interstitial (test platform 50833)
 // Leaderboard: no server needed — the bot publishes data/*.json into this repo
 // and scores sync through Telegram-verified sendData(). See js/api.js header.
 
