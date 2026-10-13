@@ -29,11 +29,13 @@ window.UI = (() => {
     el("menu-streak").textContent = GameState.streak;
     el("menu-lives").textContent = hearts(GameState.lives);
     el("menu-lives-inline").textContent = hearts(GameState.lives);
-    // daily bonus button state
+    // daily bonus button: ALWAYS visible (moderators must see the ad placement);
+    // disabled + label change when already claimed today
     const d = el("btn-daily");
     if (d) {
-      d.classList.toggle("hidden", !GameState.canDaily());
-      d.textContent = t("dailyBtn");
+      const can = GameState.canDaily();
+      d.disabled = !can;
+      d.textContent = can ? t("dailyBtn") : t("dailyDone");
     }
     // regen eta line
     const eta = el("menu-lives-eta");
