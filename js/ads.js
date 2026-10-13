@@ -39,6 +39,11 @@ window.GameAds = (() => {
   async function init() {
     try {
       if (!rewBlock && !intBlock) return;
+      // Adsgram SDK only delivers inside the Telegram webview; in a plain
+      // browser it would just alert launch-params errors. Skip there — the
+      // UI's ad buttons then stay hidden and share/coins fallbacks take over.
+      const tgw = window.Telegram && window.Telegram.WebApp;
+      if (!tgw || !tgw.initData) return;
       if (!window.Adsgram) {
         await new Promise((res, rej) => {
           const s = document.createElement("script");
