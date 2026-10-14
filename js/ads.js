@@ -36,12 +36,21 @@ window.GameAds = (() => {
   function available() {
     return !!(rewBlock && window.Adsgram && rewardedCtrl);
   }
+  // Placement visibility vs ad delivery are separate concerns: Adsgram's
+  // moderation opens the App URL in a PLAIN browser and declines by clause 11
+  // ("ad placement not verifiable") if the ad buttons aren't on screen. So ad
+  // buttons must render everywhere; actual delivery stays TMA-only.
+  function placementVisible() {
+    return !!rewBlock;
+  }
   async function init() {
     try {
       if (!rewBlock && !intBlock) return;
-      // Adsgram SDK only delivers inside the Telegram webview; in a plain
-      // browser it would just alert launch-params errors. Skip there — the
-      // UI's ad buttons then stay hidden and share/coins fallbacks take over.
+      killToasts(); // SDK may still page.alert in plain browsers — suppress
+      // Script tag present in EVERY environment (moderation sees the request).
+      loadSDK();
+      // Controllers only inside the Telegram webview: in a plain browser
+      // Adsgram.init() would alert launch-params errors in a loop.
       const tgw = window.Telegram && window.Telegram.WebApp;
       if (!tgw || !tgw.initData) return;
       if (!window.Adsgram) {
@@ -54,7 +63,6 @@ window.GameAds = (() => {
         });
       }
       if (window.Adsgram) {
-        killToasts();
         if (rewBlock) rewardedCtrl = window.Adsgram.init({ blockId: rewBlock, debug: false });
         if (intBlock) interCtrl = window.Adsgram.init({ blockId: intBlock, debug: false });
         // keep Adsgram's default alert popups suppressed (banner-not-found / too-long-session)
@@ -100,5 +108,5 @@ window.GameAds = (() => {
     try { interCtrl.show(); } catch (e) {}
     return true;
   }
-  return { init, loadSDK, available, showRewarded, rewarded, maybeInterstitial };
+  return { init, loadSDK, available, placementVisible, showRewarded, rewarded, maybeInterstitial };
 })();

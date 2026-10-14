@@ -102,8 +102,9 @@ window.UI = (() => {
   // ---------- out of lives ----------
   function openNoLives() {
     el("nolives-lives").textContent = hearts(GameState.lives);
-    // ad button only when a provider is wired
-    el("btn-lives-ad").classList.toggle("hidden", !GameAds.available());
+    // ad button visible whenever ad ids are wired (placement must render on
+    // the plain-web App URL for Adsgram moderation); delivery still TMA-only
+    el("btn-lives-ad").classList.toggle("hidden", !GameAds.placementVisible());
     // coins button only when affordable is possible (coins < price → still show, disabled)
     const cost = 100;
     const bc = el("btn-lives-coins");
