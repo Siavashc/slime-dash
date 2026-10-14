@@ -6,8 +6,10 @@
 const ADSDK = "https://sad.adsgram.ai/js/sad.min.js";
 window.GameAds = (() => {
   let rewardedCtrl = null, interCtrl = null;
-  let rewBlock = window.ADSGRAM_BLOCK_ID || "";
-  let intBlock = window.ADSGRAM_INT_ID || "";
+  // block ids are read LAZILY: main.js (which defines them) loads AFTER this
+  // file, so an eager capture would always be "" and silently kill all ads
+  const rewBlock = () => window.ADSGRAM_BLOCK_ID || "";
+  const intBlock = () => window.ADSGRAM_INT_ID || "";
   // interstitial density guardrails (per research: 3-4 interstitials/day/user ok)
   const INT_EVERY_RUNS = 2, INT_COOLDOWN_MS = 30000, INT_SKIP_FIRST_RUNS = 3;
   let runsEnded = 0, lastIntAt = 0, lastRewardedAt = 0;
@@ -25,7 +27,7 @@ window.GameAds = (() => {
 
   function loadSDK() {
     try {
-      if (!window.Adsgram && (rewBlock || intBlock)) {
+      if (!window.Adsgram && (rewBlock() || intBlock())) {
         const s = document.createElement("script");
         s.src = ADSDK;
         document.head.appendChild(s);
@@ -34,18 +36,18 @@ window.GameAds = (() => {
   }
 
   function available() {
-    return !!(rewBlock && window.Adsgram && rewardedCtrl);
+    return !!(rewBlock() && window.Adsgram && rewardedCtrl);
   }
   // Placement visibility vs ad delivery are separate concerns: Adsgram's
   // moderation opens the App URL in a PLAIN browser and declines by clause 11
   // ("ad placement not verifiable") if the ad buttons aren't on screen. So ad
   // buttons must render everywhere; actual delivery stays TMA-only.
   function placementVisible() {
-    return !!rewBlock;
+    return !!rewBlock();
   }
   async function init() {
     try {
-      if (!rewBlock && !intBlock) return;
+      if (!rewBlock() && !intBlock()) return;
       killToasts(); // SDK may still page.alert in plain browsers — suppress
       // Script tag present in EVERY environment (moderation sees the request).
       loadSDK();
@@ -63,8 +65,8 @@ window.GameAds = (() => {
         });
       }
       if (window.Adsgram) {
-        if (rewBlock) rewardedCtrl = window.Adsgram.init({ blockId: rewBlock, debug: false });
-        if (intBlock) interCtrl = window.Adsgram.init({ blockId: intBlock, debug: false });
+        if (rewBlock()) rewardedCtrl = window.Adsgram.init({ blockId: rewBlock(), debug: false });
+        if (intBlock()) interCtrl = window.Adsgram.init({ blockId: intBlock(), debug: false });
         // keep Adsgram's default alert popups suppressed (banner-not-found / too-long-session)
         try {
           const c = rewardedCtrl || interCtrl;
